@@ -414,6 +414,11 @@ const SettingsView: React.FC = () => {
               <p className="text-sm text-slate-500 dark:text-slate-400">
                 Tem certeza que deseja excluir {deleteModal.type === 'season' ? 'a temporada' : 'o período'} <strong>{deleteModal.item?.name || deleteModal.item?.label}</strong>?
               </p>
+              {deleteModal.type === 'season' && (
+                <p className="mt-4 p-2 bg-danger/10 text-[11px] text-danger font-bold rounded border border-danger/20">
+                  AVISO: Isso também excluirá todos os períodos associados a esta temporada.
+                </p>
+              )}
             </div>
             <div className="p-6 border-t border-slate-100 dark:border-border-dark flex justify-center gap-3">
               <button

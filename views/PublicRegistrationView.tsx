@@ -140,12 +140,32 @@ const PublicRegistrationView: React.FC = () => {
         fetchOptions();
     }, []);
 
-    // Função para formatar telefone no padrão (11) 22222-2222
+    // Função para calcular idade com base na data de nascimento
+    const calculateAge = (birthDate: string): string => {
+        if (!birthDate) return '';
+        const today = new Date();
+        const birth = new Date(birthDate);
+        let age = today.getFullYear() - birth.getFullYear();
+        const monthDiff = today.getMonth() - birth.getMonth();
+        if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
+            age--;
+        }
+        return age >= 0 ? age.toString() : '';
+    };
+
+    // Handler para data de nascimento
+    const handleBirthDateChange = (value: string) => {
+        const age = calculateAge(value);
+        setFormData(prev => ({ ...prev, childBirthDate: value, childAge: age }));
+    };
+
+    // Função para formatar telefone no padrão (11) 2222-2222 ou (11) 92222-2222
     const formatPhone = (value: string): string => {
         const numbers = value.replace(/\D/g, '').slice(0, 11);
         if (numbers.length === 0) return '';
         if (numbers.length <= 2) return `(${numbers}`;
-        if (numbers.length <= 7) return `(${numbers.slice(0, 2)}) ${numbers.slice(2)}`;
+        if (numbers.length <= 6) return `(${numbers.slice(0, 2)}) ${numbers.slice(2)}`;
+        if (numbers.length <= 10) return `(${numbers.slice(0, 2)}) ${numbers.slice(2, 6)}-${numbers.slice(6)}`;
         return `(${numbers.slice(0, 2)}) ${numbers.slice(2, 7)}-${numbers.slice(7)}`;
     };
 
@@ -458,7 +478,7 @@ const PublicRegistrationView: React.FC = () => {
                                             type="date"
                                             required
                                             value={formData.childBirthDate}
-                                            onChange={(e) => handleChange('childBirthDate', e.target.value)}
+                                            onChange={(e) => handleBirthDateChange(e.target.value)}
                                         />
                                     </div>
                                     <div>

@@ -9,7 +9,8 @@ import { Season } from '../types';
 interface RegistrationFormData {
   // Opções
   options: string[];
-  season: Season;
+  season: string;
+  period: string;
 
   // Dados da criança
   childName: string;
@@ -27,15 +28,32 @@ interface RegistrationFormData {
 
   // Dados da mãe
   motherName: string;
+  motherWorkplace: string;
   motherCpf: string;
   motherPhone: string;
   motherEmail: string;
 
   // Dados do pai
   fatherName: string;
+  fatherWorkplace: string;
   fatherCpf: string;
   fatherPhone: string;
   fatherEmail: string;
+
+  // Contato de emergência
+  emergencyContactName: string;
+  emergencyContactRelation: string;
+  emergencyContactPhone: string;
+  emergencyContactPhoneSecondary: string;
+
+  // Informações adicionais
+  parentsAbsent: string;
+  authorizeThirdParty: string;
+  authorizedPersonName: string;
+
+  // Saúde/Segurança
+  canSwim: string;
+  willUseFloats: string;
 
   // Assinatura
   signatureLocation: string;
@@ -44,7 +62,8 @@ interface RegistrationFormData {
 
 const initialFormData: RegistrationFormData = {
   options: ['Embarque ABC'],
-  season: Season.SUMMER_2026,
+  season: '',
+  period: '',
   childName: '',
   childBirthDate: '',
   childAge: '',
@@ -56,13 +75,24 @@ const initialFormData: RegistrationFormData = {
   addressNeighborhood: '',
   addressCity: '',
   motherName: '',
+  motherWorkplace: '',
   motherCpf: '',
   motherPhone: '',
   motherEmail: '',
   fatherName: '',
+  fatherWorkplace: '',
   fatherCpf: '',
   fatherPhone: '',
   fatherEmail: '',
+  emergencyContactName: '',
+  emergencyContactRelation: '',
+  emergencyContactPhone: '',
+  emergencyContactPhoneSecondary: '',
+  parentsAbsent: '',
+  authorizeThirdParty: '',
+  authorizedPersonName: '',
+  canSwim: '',
+  willUseFloats: '',
   signatureLocation: 'São Paulo',
   signatureDate: new Date().toISOString().split('T')[0],
 };
@@ -76,7 +106,92 @@ const RegistrationView: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
-  const handleChange = (field: keyof RegistrationFormData, value: string) => {
+  // Estados para temporadas e períodos
+  const [seasons, setSeasons] = React.useState<{ id: string, name: string }[]>([]);
+  const [periods, setPeriods] = React.useState<{ id: string, label: string, season_id: string }[]>([]);
+  const [loadingOptions, setLoadingOptions] = React.useState(true);
+  const [loadingCep, setLoadingCep] = useState(false);
+
+  React.useEffect(() => {
+    const fetchOptions = async () => {
+      const { data: seasonsData } = await supabase.from('seasons').select('id, name').eq('status', 'active');
+      const { data: periodsData } = await supabase.from('periods').select('id, label, season_id');
+      if (seasonsData) setSeasons(seasonsData);
+      if (periodsData) setPeriods(periodsData);
+      setLoadingOptions(false);
+    };
+    fetchOptions();
+  }, []);
+
+  // Formatação e Cálculos
+  const formatPhone = (value: string): string => {
+    const numbers = value.replace(/\D/g, '').slice(0, 11);
+    if (numbers.length === 0) return '';
+    if (numbers.length <= 2) return `(${numbers}`;
+    if (numbers.length <= 6) return `(${numbers.slice(0, 2)}) ${numbers.slice(2)}`;
+    if (numbers.length <= 10) return `(${numbers.slice(0, 2)}) ${numbers.slice(2, 6)}-${numbers.slice(6)}`;
+    return `(${numbers.slice(0, 2)}) ${numbers.slice(2, 7)}-${numbers.slice(7)}`;
+  };
+
+  const formatCpf = (value: string): string => {
+    const numbers = value.replace(/\D/g, '').slice(0, 11);
+    if (numbers.length === 0) return '';
+    if (numbers.length <= 3) return numbers;
+    if (numbers.length <= 6) return `${numbers.slice(0, 3)}.${numbers.slice(3)}`;
+    if (numbers.length <= 9) return `${numbers.slice(0, 3)}.${numbers.slice(3, 6)}.${numbers.slice(6)}`;
+    return `${numbers.slice(0, 3)}.${numbers.slice(3, 6)}.${numbers.slice(6, 9)}-${numbers.slice(9)}`;
+  };
+
+  const calculateAge = (birthDate: string): string => {
+    if (!birthDate) return '';
+    const today = new Date();
+    const birth = new Date(birthDate);
+    let age = today.getFullYear() - birth.getFullYear();
+    const monthDiff = today.getMonth() - birth.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) age--;
+    return age >= 0 ? age.toString() : '';
+  };
+
+  const handlePhoneChange = (field: keyof RegistrationFormData, value: string) => {
+    setFormData(prev => ({ ...prev, [field]: formatPhone(value) }));
+  };
+
+  const handleCpfChange = (field: keyof RegistrationFormData, value: string) => {
+    setFormData(prev => ({ ...prev, [field]: formatCpf(value) }));
+  };
+
+  const handleBirthDateChange = (value: string) => {
+    setFormData(prev => ({ ...prev, childBirthDate: value, childAge: calculateAge(value) }));
+  };
+
+  const fetchCep = async (cep: string) => {
+    const cleanCep = cep.replace(/\D/g, '');
+    if (cleanCep.length !== 8) return;
+    setLoadingCep(true);
+    try {
+      const resp = await fetch(`https://viacep.com.br/ws/${cleanCep}/json/`);
+      const data = await resp.json();
+      if (!data.erro) {
+        setFormData(prev => ({
+          ...prev,
+          addressStreet: data.logradouro || '',
+          addressNeighborhood: data.bairro || '',
+          addressCity: `${data.localidade}/${data.uf}` || '',
+        }));
+      }
+    } catch (e) { console.error(e); }
+    setLoadingCep(false);
+  };
+
+  const handleCepChange = (value: string) => {
+    const numbers = value.replace(/\D/g, '').slice(0, 8);
+    let formatted = numbers;
+    if (numbers.length > 5) formatted = `${numbers.slice(0, 5)}-${numbers.slice(5)}`;
+    setFormData(prev => ({ ...prev, addressCep: formatted }));
+    if (numbers.length === 8) fetchCep(numbers);
+  };
+
+  const handleChange = (field: keyof RegistrationFormData, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
@@ -97,6 +212,7 @@ const RegistrationView: React.FC = () => {
     try {
       const { error: insertError } = await supabase.from('registrations').insert({
         season: formData.season,
+        period: formData.period || null,
         options: formData.options,
         child_name: formData.childName,
         child_birth_date: formData.childBirthDate || null,
@@ -109,13 +225,24 @@ const RegistrationView: React.FC = () => {
         address_neighborhood: formData.addressNeighborhood || null,
         address_city: formData.addressCity || null,
         mother_name: formData.motherName || null,
+        mother_workplace: formData.motherWorkplace || null,
         mother_cpf: formData.motherCpf || null,
         mother_phone: formData.motherPhone || null,
         mother_email: formData.motherEmail || null,
         father_name: formData.fatherName || null,
+        father_workplace: formData.fatherWorkplace || null,
         father_cpf: formData.fatherCpf || null,
         father_phone: formData.fatherPhone || null,
         father_email: formData.fatherEmail || null,
+        emergency_contact_name: formData.emergencyContactName || null,
+        emergency_contact_relation: formData.emergencyContactRelation || null,
+        emergency_contact_phone: formData.emergencyContactPhone || null,
+        emergency_contact_phone_secondary: formData.emergencyContactPhoneSecondary || null,
+        parents_absent: formData.parentsAbsent === 'Sim',
+        authorize_third_party: formData.authorizeThirdParty === 'Sim',
+        authorized_person_name: formData.authorizedPersonName || null,
+        can_swim: formData.canSwim === 'Sim',
+        will_use_floats: formData.willUseFloats === 'Sim',
         signature_location: formData.signatureLocation || null,
         signature_date: formData.signatureDate || null,
         payment_amount: 350.00,
@@ -176,17 +303,38 @@ const RegistrationView: React.FC = () => {
 
       <form onSubmit={handleSubmit}>
         <FormSection title="Temporada e Opções" icon="tune">
-          <div className="mb-6">
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Temporada *</label>
-            <select
-              value={formData.season}
-              onChange={(e) => handleChange('season', e.target.value)}
-              className="w-full md:w-64 rounded-lg border-slate-300 dark:border-border-dark bg-white dark:bg-background-dark shadow-sm focus:border-primary focus:ring-primary text-slate-800 dark:text-white px-3 py-2"
-              required
-            >
-              <option value={Season.SUMMER_2026}>Verão 2026</option>
-              <option value={Season.WINTER_2026}>Inverno 2026</option>
-            </select>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Temporada *</label>
+              <select
+                value={formData.season}
+                onChange={(e) => {
+                  handleChange('season', e.target.value);
+                  handleChange('period', '');
+                }}
+                className="w-full rounded-lg border-slate-300 dark:border-border-dark bg-white dark:bg-background-dark shadow-sm focus:border-primary focus:ring-primary text-slate-800 dark:text-white px-3 py-2"
+                required
+                disabled={loadingOptions}
+              >
+                <option value="">{loadingOptions ? 'Carregando...' : 'Selecione a temporada'}</option>
+                {seasons.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Período *</label>
+              <select
+                value={formData.period}
+                onChange={(e) => handleChange('period', e.target.value)}
+                className="w-full rounded-lg border-slate-300 dark:border-border-dark bg-white dark:bg-background-dark shadow-sm focus:border-primary focus:ring-primary text-slate-800 dark:text-white px-3 py-2"
+                required
+                disabled={!formData.season}
+              >
+                <option value="">{!formData.season ? 'Selecione a temporada primeiro' : 'Selecione o período'}</option>
+                {periods.filter(p => seasons.find(s => s.name === formData.season)?.id === p.season_id).map(p => (
+                  <option key={p.id} value={p.label}>{p.label}</option>
+                ))}
+              </select>
+            </div>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {availableOptions.map((option) => (
@@ -222,14 +370,14 @@ const RegistrationView: React.FC = () => {
               type="date"
               required
               value={formData.childBirthDate}
-              onChange={(e) => handleChange('childBirthDate', e.target.value)}
+              onChange={(e) => handleBirthDateChange(e.target.value)}
             />
             <Input
               label="Idade"
               placeholder="Ex: 10"
               type="number"
               value={formData.childAge}
-              onChange={(e) => handleChange('childAge', e.target.value)}
+              readOnly
             />
             <Input
               label="RG"
@@ -248,12 +396,16 @@ const RegistrationView: React.FC = () => {
             <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-6">Endereço Residencial</h4>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="md:col-span-2">
-                <Input
-                  label="CEP"
-                  type="text"
-                  value={formData.addressCep}
-                  onChange={(e) => handleChange('addressCep', e.target.value)}
-                />
+                <div className="relative">
+                  <Input
+                    label="CEP"
+                    type="text"
+                    placeholder="00000-000"
+                    value={formData.addressCep}
+                    onChange={(e) => handleCepChange(e.target.value)}
+                  />
+                  {loadingCep && <div className="absolute right-3 top-[38px] animate-spin h-5 w-5 border-2 border-primary border-t-transparent rounded-full"></div>}
+                </div>
               </div>
               <div className="md:col-span-2 grid grid-cols-4 gap-4">
                 <div className="col-span-3">
@@ -298,23 +450,32 @@ const RegistrationView: React.FC = () => {
                 value={formData.motherName}
                 onChange={(e) => handleChange('motherName', e.target.value)}
               />
+              <Input
+                label="Onde trabalha"
+                type="text"
+                value={formData.motherWorkplace}
+                onChange={(e) => handleChange('motherWorkplace', e.target.value)}
+              />
               <div className="grid grid-cols-2 gap-4">
                 <Input
                   label="CPF"
                   type="text"
+                  placeholder="000.000.000-00"
                   value={formData.motherCpf}
-                  onChange={(e) => handleChange('motherCpf', e.target.value)}
+                  onChange={(e) => handleCpfChange('motherCpf', e.target.value)}
                 />
                 <Input
                   label="Telefone"
                   type="text"
+                  placeholder="(11) 99999-9999"
                   value={formData.motherPhone}
-                  onChange={(e) => handleChange('motherPhone', e.target.value)}
+                  onChange={(e) => handlePhoneChange('motherPhone', e.target.value)}
                 />
               </div>
               <Input
                 label="Email"
                 type="email"
+                placeholder="exemplo@gmail.com"
                 value={formData.motherEmail}
                 onChange={(e) => handleChange('motherEmail', e.target.value)}
               />
@@ -329,26 +490,142 @@ const RegistrationView: React.FC = () => {
                 value={formData.fatherName}
                 onChange={(e) => handleChange('fatherName', e.target.value)}
               />
+              <Input
+                label="Onde trabalha"
+                type="text"
+                value={formData.fatherWorkplace}
+                onChange={(e) => handleChange('fatherWorkplace', e.target.value)}
+              />
               <div className="grid grid-cols-2 gap-4">
                 <Input
                   label="CPF"
                   type="text"
+                  placeholder="000.000.000-00"
                   value={formData.fatherCpf}
-                  onChange={(e) => handleChange('fatherCpf', e.target.value)}
+                  onChange={(e) => handleCpfChange('fatherCpf', e.target.value)}
                 />
                 <Input
                   label="Telefone"
                   type="text"
+                  placeholder="(11) 99999-9999"
                   value={formData.fatherPhone}
-                  onChange={(e) => handleChange('fatherPhone', e.target.value)}
+                  onChange={(e) => handlePhoneChange('fatherPhone', e.target.value)}
                 />
               </div>
               <Input
                 label="Email"
                 type="email"
+                placeholder="exemplo@gmail.com"
                 value={formData.fatherEmail}
                 onChange={(e) => handleChange('fatherEmail', e.target.value)}
               />
+            </div>
+          </FormSection>
+        </div>
+
+        <FormSection title="Contato de Emergência" icon="emergency">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="md:col-span-2">
+              <Input
+                label="Nome do contato *"
+                type="text"
+                required
+                value={formData.emergencyContactName}
+                onChange={(e) => handleChange('emergencyContactName', e.target.value)}
+              />
+            </div>
+            <Input
+              label="Parentesco"
+              type="text"
+              value={formData.emergencyContactRelation}
+              onChange={(e) => handleChange('emergencyContactRelation', e.target.value)}
+            />
+            <Input
+              label="Telefone principal *"
+              type="text"
+              required
+              placeholder="(11) 99999-9999"
+              value={formData.emergencyContactPhone}
+              onChange={(e) => handlePhoneChange('emergencyContactPhone', e.target.value)}
+            />
+            <div className="md:col-span-2">
+              <Input
+                label="Telefone secundário"
+                type="text"
+                placeholder="(11) 99999-9999"
+                value={formData.emergencyContactPhoneSecondary}
+                onChange={(e) => handlePhoneChange('emergencyContactPhoneSecondary', e.target.value)}
+              />
+            </div>
+          </div>
+        </FormSection>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <FormSection title="Informações e Saúde" icon="info">
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Sabe nadar?</label>
+                <select
+                  className="w-full rounded-lg border-slate-300 dark:border-border-dark bg-white dark:bg-background-dark shadow-sm focus:border-primary focus:ring-primary text-slate-800 dark:text-white px-3 py-2"
+                  value={formData.canSwim}
+                  onChange={(e) => handleChange('canSwim', e.target.value)}
+                >
+                  <option value="">Selecione</option>
+                  <option value="Sim">Sim</option>
+                  <option value="Não">Não</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Usará boias?</label>
+                <select
+                  className="w-full rounded-lg border-slate-300 dark:border-border-dark bg-white dark:bg-background-dark shadow-sm focus:border-primary focus:ring-primary text-slate-800 dark:text-white px-3 py-2"
+                  value={formData.willUseFloats}
+                  onChange={(e) => handleChange('willUseFloats', e.target.value)}
+                >
+                  <option value="">Selecione</option>
+                  <option value="Sim">Sim</option>
+                  <option value="Não">Não</option>
+                </select>
+                {formData.willUseFloats === 'Sim' && <p className="text-[10px] text-danger mt-1">Pais devem providenciar boias.</p>}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Pais ausentes?</label>
+                <select
+                  className="w-full rounded-lg border-slate-300 dark:border-border-dark bg-white dark:bg-background-dark shadow-sm focus:border-primary focus:ring-primary text-slate-800 dark:text-white px-3 py-2"
+                  value={formData.parentsAbsent}
+                  onChange={(e) => handleChange('parentsAbsent', e.target.value)}
+                >
+                  <option value="">Selecione</option>
+                  <option value="Sim">Sim</option>
+                  <option value="Não">Não</option>
+                </select>
+              </div>
+            </div>
+          </FormSection>
+
+          <FormSection title="Autorizações" icon="verified_user">
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Autoriza terceiros?</label>
+                <select
+                  className="w-full rounded-lg border-slate-300 dark:border-border-dark bg-white dark:bg-background-dark shadow-sm focus:border-primary focus:ring-primary text-slate-800 dark:text-white px-3 py-2"
+                  value={formData.authorizeThirdParty}
+                  onChange={(e) => handleChange('authorizeThirdParty', e.target.value)}
+                >
+                  <option value="">Selecione</option>
+                  <option value="Sim">Sim</option>
+                  <option value="Não">Não</option>
+                </select>
+              </div>
+              {formData.authorizeThirdParty === 'Sim' && (
+                <Input
+                  label="Nome da pessoa autorizada *"
+                  type="text"
+                  required
+                  value={formData.authorizedPersonName}
+                  onChange={(e) => handleChange('authorizedPersonName', e.target.value)}
+                />
+              )}
             </div>
           </FormSection>
         </div>

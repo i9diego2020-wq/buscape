@@ -324,15 +324,18 @@ const RegistrationDetailView: React.FC = () => {
                                     {registration.parents_absent ? 'warning' : 'home'}
                                 </span>
                             </div>
-                            <div className="p-3 rounded-lg bg-slate-50 dark:bg-slate-800/50 text-center">
+                            <div className="p-3 rounded-lg bg-slate-50 dark:bg-slate-800/50 text-center flex flex-col items-center justify-center">
                                 <p className="text-xs text-slate-500 mb-1">Autoriza Terceiros?</p>
                                 <span className={`material-symbols-outlined text-2xl ${registration.authorize_third_party ? 'text-success' : 'text-danger'}`}>
                                     {registration.authorize_third_party ? 'check_circle' : 'cancel'}
                                 </span>
                                 {registration.authorize_third_party && registration.authorized_person_name && (
-                                    <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 font-medium">
-                                        {registration.authorized_person_name}
-                                    </p>
+                                    <div className="mt-2 pt-2 border-t border-slate-200 dark:border-slate-700 w-full">
+                                        <p className="text-[10px] text-slate-400 uppercase font-bold">Autorizado:</p>
+                                        <p className="text-xs text-slate-700 dark:text-slate-200 font-semibold break-words">
+                                            {registration.authorized_person_name}
+                                        </p>
+                                    </div>
                                 )}
                             </div>
                         </div>
