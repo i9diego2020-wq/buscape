@@ -1,0 +1,8 @@
+
+{
+  "name": "Acampamento Buscapé Admin & Registration",
+  "description": "A comprehensive camp management system featuring a registration portal, admin dashboard, and authentication, inspired by the Vuexy design system.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
