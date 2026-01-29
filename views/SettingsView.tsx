@@ -19,19 +19,29 @@ interface Period {
   season_name?: string;
 }
 
+interface Fee {
+  id: string;
+  name: string;
+  amount: number;
+  created_at?: string;
+}
+
 const SettingsView: React.FC = () => {
   const [seasons, setSeasons] = useState<Season[]>([]);
   const [periods, setPeriods] = useState<Period[]>([]);
+  const [fees, setFees] = useState<Fee[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Modal states
   const [seasonModal, setSeasonModal] = useState<{ open: boolean; editing: Season | null }>({ open: false, editing: null });
   const [periodModal, setPeriodModal] = useState<{ open: boolean; editing: Period | null }>({ open: false, editing: null });
-  const [deleteModal, setDeleteModal] = useState<{ open: boolean; type: 'season' | 'period'; item: any }>({ open: false, type: 'season', item: null });
+  const [feeModal, setFeeModal] = useState<{ open: boolean; editing: Fee | null }>({ open: false, editing: null });
+  const [deleteModal, setDeleteModal] = useState<{ open: boolean; type: 'season' | 'period' | 'fee'; item: any }>({ open: false, type: 'season', item: null });
 
   // Form states
   const [seasonForm, setSeasonForm] = useState({ name: '', status: 'active' as 'active' | 'closed' });
   const [periodForm, setPeriodForm] = useState({ label: '', start_date: '', end_date: '', season_id: '' });
+  const [feeForm, setFeeForm] = useState({ name: '', amount: 0 });
 
   // Fetch data
   const fetchSeasons = async () => {
@@ -49,10 +59,15 @@ const SettingsView: React.FC = () => {
     }
   };
 
+  const fetchFees = async () => {
+    const { data, error } = await supabase.from('fees').select('*').order('created_at', { ascending: true });
+    if (!error && data) setFees(data);
+  };
+
   useEffect(() => {
     const loadData = async () => {
       setLoading(true);
-      await Promise.all([fetchSeasons(), fetchPeriods()]);
+      await Promise.all([fetchSeasons(), fetchPeriods(), fetchFees()]);
       setLoading(false);
     };
     loadData();
@@ -115,6 +130,33 @@ const SettingsView: React.FC = () => {
     await supabase.from('periods').delete().eq('id', id);
     setDeleteModal({ open: false, type: 'period', item: null });
     fetchPeriods();
+  };
+
+  // Fee CRUD
+  const openFeeModal = (fee?: Fee) => {
+    if (fee) {
+      setFeeForm({ name: fee.name, amount: fee.amount });
+      setFeeModal({ open: true, editing: fee });
+    } else {
+      setFeeForm({ name: '', amount: 0 });
+      setFeeModal({ open: true, editing: null });
+    }
+  };
+
+  const saveFee = async () => {
+    if (feeModal.editing) {
+      await supabase.from('fees').update(feeForm).eq('id', feeModal.editing.id);
+    } else {
+      await supabase.from('fees').insert(feeForm);
+    }
+    setFeeModal({ open: false, editing: null });
+    fetchFees();
+  };
+
+  const deleteFee = async (id: string) => {
+    await supabase.from('fees').delete().eq('id', id);
+    setDeleteModal({ open: false, type: 'fee', item: null });
+    fetchFees();
   };
 
   const formatDate = (dateStr: string) => {
@@ -215,20 +257,34 @@ const SettingsView: React.FC = () => {
         </SettingsCard>
 
         {/* Card: Valores */}
-        <SettingsCard title="Valores e Taxas" icon="attach_money" onAdd={() => { }}>
+        <SettingsCard title="Valores e Taxas" icon="attach_money" onAdd={() => openFeeModal()}>
           <div className="space-y-3">
-            {[
-              { item: 'Inscrição Regular', price: 'R$ 1.200,00' },
-              { item: 'Inscrição Early Bird', price: 'R$ 950,00' },
-              { item: 'Taxa de Kart', price: 'R$ 150,00' },
-              { item: 'Kit Camiseta', price: 'R$ 85,00' },
-              { item: 'Seguro Adicional', price: 'R$ 45,00' },
-            ].map((item, idx) => (
-              <div key={idx} className="flex items-center justify-between py-2 border-b border-slate-100 dark:border-border-dark last:border-0">
-                <span className="text-sm text-slate-600 dark:text-slate-300">{item.item}</span>
-                <span className="text-sm font-bold text-slate-800 dark:text-white">{item.price}</span>
+            {loading ? (
+              <div className="flex items-center justify-center py-8">
+                <div className="animate-spin h-6 w-6 border-2 border-primary border-t-transparent rounded-full"></div>
               </div>
-            ))}
+            ) : fees.length === 0 ? (
+              <p className="text-sm text-slate-400 text-center py-4">Nenhum valor cadastrado</p>
+            ) : (
+              fees.map((item) => (
+                <div key={item.id} className="flex items-center justify-between py-2 border-b border-slate-100 dark:border-border-dark last:border-0">
+                  <span className="text-sm text-slate-600 dark:text-slate-300">{item.name}</span>
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm font-bold text-slate-800 dark:text-white">
+                      {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.amount)}
+                    </span>
+                    <div className="flex gap-1">
+                      <button onClick={() => openFeeModal(item)} className="p-1 text-slate-400 hover:text-primary transition-colors">
+                        <span className="material-symbols-outlined text-[18px]">edit</span>
+                      </button>
+                      <button onClick={() => setDeleteModal({ open: true, type: 'fee', item })} className="p-1 text-slate-400 hover:text-danger transition-colors">
+                        <span className="material-symbols-outlined text-[18px]">delete</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
           <div className="mt-8">
             <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-3">Métodos de Pagamento</h4>
@@ -402,6 +458,56 @@ const SettingsView: React.FC = () => {
         </div>
       )}
 
+      {/* Fee Modal */}
+      {feeModal.open && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-surface-dark rounded-xl shadow-xl w-full max-w-md">
+            <div className="p-6 border-b border-slate-100 dark:border-border-dark">
+              <h3 className="text-lg font-bold text-slate-800 dark:text-white">
+                {feeModal.editing ? 'Editar Valor/Taxa' : 'Novo Valor/Taxa'}
+              </h3>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Nome</label>
+                <input
+                  type="text"
+                  value={feeForm.name}
+                  onChange={(e) => setFeeForm({ ...feeForm, name: e.target.value })}
+                  placeholder="Ex: Taxa de Inscrição"
+                  className="w-full rounded-lg border-gray-300 dark:border-border-dark dark:bg-slate-800 shadow-sm focus:border-primary focus:ring-primary text-slate-900 dark:text-white"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Valor (R$)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={feeForm.amount}
+                  onChange={(e) => setFeeForm({ ...feeForm, amount: parseFloat(e.target.value) })}
+                  className="w-full rounded-lg border-gray-300 dark:border-border-dark dark:bg-slate-800 shadow-sm focus:border-primary focus:ring-primary text-slate-900 dark:text-white"
+                />
+              </div>
+            </div>
+            <div className="p-6 border-t border-slate-100 dark:border-border-dark flex justify-end gap-3">
+              <button
+                onClick={() => setFeeModal({ open: false, editing: null })}
+                className="px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={saveFee}
+                disabled={!feeForm.name || feeForm.amount < 0}
+                className="px-4 py-2 text-sm font-medium text-white bg-primary hover:bg-primary-hover rounded-lg transition-colors disabled:opacity-50"
+              >
+                {feeModal.editing ? 'Salvar' : 'Criar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Delete Confirmation Modal */}
       {deleteModal.open && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -412,7 +518,7 @@ const SettingsView: React.FC = () => {
               </div>
               <h3 className="text-lg font-bold text-slate-800 dark:text-white mb-2">Confirmar Exclusão</h3>
               <p className="text-sm text-slate-500 dark:text-slate-400">
-                Tem certeza que deseja excluir {deleteModal.type === 'season' ? 'a temporada' : 'o período'} <strong>{deleteModal.item?.name || deleteModal.item?.label}</strong>?
+                Tem certeza que deseja excluir <strong>{deleteModal.item?.name || deleteModal.item?.label}</strong>?
               </p>
               {deleteModal.type === 'season' && (
                 <p className="mt-4 p-2 bg-danger/10 text-[11px] text-danger font-bold rounded border border-danger/20">
@@ -428,7 +534,11 @@ const SettingsView: React.FC = () => {
                 Cancelar
               </button>
               <button
-                onClick={() => deleteModal.type === 'season' ? deleteSeason(deleteModal.item.id) : deletePeriod(deleteModal.item.id)}
+                onClick={() => {
+                  if (deleteModal.type === 'season') deleteSeason(deleteModal.item.id);
+                  else if (deleteModal.type === 'period') deletePeriod(deleteModal.item.id);
+                  else if (deleteModal.type === 'fee') deleteFee(deleteModal.item.id);
+                }}
                 className="px-4 py-2 text-sm font-medium text-white bg-danger hover:bg-red-600 rounded-lg transition-colors"
               >
                 Excluir
